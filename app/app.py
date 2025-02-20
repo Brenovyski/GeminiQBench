@@ -1,71 +1,76 @@
 import streamlit as st
 from PIL import Image
+import gemini  # <-- This is the gemini.py module you created
 
 def main():
     st.set_page_config(layout="wide")
-    
-    st.title("GeminiQBench")
-    
-    # Create two columns for the image and the masked output
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.header("Add the image here")
-        uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-        
-        if uploaded_file is not None:
-            # Display the original image
-            original_image = Image.open(uploaded_file)
-            st.image(original_image, caption="Original Image", use_column_width=True)
-    
-    with col2:
-        st.header("Masked Image")
-        # In a real application, replace the following lines with:
-        # 1. Gemini 2.0 object detection
-        # 2. Masked image generation
-        if uploaded_file is not None:
-            # TODO: Generate masked image using Gemini 2.0
-            # masked_image = gemini_2_0_detect_and_mask(original_image)
-            # st.image(masked_image, caption="Masked Image", use_column_width=True)
-            st.info("Masked image would appear here once processed by Gemini 2.0.")
-        else:
-            st.write("No image uploaded yet.")
-    
-    st.write("---")
-    
-    # Text input for user questions
-    st.subheader("Ask a question about the image:")
-    user_question = st.text_input("", "")
-    enter_clicked = st.button("Enter")
-    
-    # Placeholder for model responses
-    # In a real application, you would call your LMMS APIs here,
-    # passing in the user_question and the masked image data.
-    
-    # Maintain a session state to store conversation history if needed
-    if "model1_response" not in st.session_state:
-        st.session_state["model1_response"] = ""
-    if "model2_response" not in st.session_state:
-        st.session_state["model2_response"] = ""
-    if "model3_response" not in st.session_state:
-        st.session_state["model3_response"] = ""
-    
-    if enter_clicked and user_question:
-        # TODO: Replace with actual model calls
-        st.session_state["model1_response"] = f"Model 1 response to: '{user_question}'"
-        st.session_state["model2_response"] = f"Model 2 response to: '{user_question}'"
-        st.session_state["model3_response"] = f"Model 3 response to: '{user_question}'"
-    
-    # Display model chat boxes
-    st.subheader("Model 1 Chat Box")
-    st.write(st.session_state["model1_response"])
-    
-    st.subheader("Model 2 Chat Box")
-    st.write(st.session_state["model2_response"])
-    
-    st.subheader("Model 3 Chat Box")
-    st.write(st.session_state["model3_response"])
+    st.title("GeminiQBench: Gemini 2.0 Object Detection + Multi-Turn Chat")
 
+    # Session state to store conversation
+    if "conversation_history" not in st.session_state:
+        st.session_state["conversation_history"] = []
+
+    # Step 1: Image Upload
+    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+    masked_image = None
+
+    if uploaded_file is not None:
+        # Create two columns for displaying images
+        col1, col2 = st.columns(2)
+
+        # Show original image in the first column
+        with col1:
+            st.subheader("Original Image")
+            original_image = Image.open(uploaded_file)
+            st.image(original_image, use_container_width=True)
+
+        # Generate and show masked image in the second column
+        with col2:
+            st.subheader("Masked Image (Gemini 2.0 Object Detection)")
+            with st.spinner("Processing image with Gemini 2.0..."):
+                masked_image = gemini.generate_masked_image(
+                    original_image,
+                    prompt="Detect all objects in the image."
+                )
+            st.image(masked_image, caption="Detected Objects", use_container_width=True)
+
+    st.write("---")
+    st.subheader("Chat with Gemini 1.5 Flash")
+
+    # Step 2: Chat interface
+    user_input = st.text_input("Type your message here...")
+    if st.button("Send"):
+        if not uploaded_file or not masked_image:
+            st.warning("Please upload an image first to generate the masked image.")
+        else:
+            # Add the user message to conversation history
+            st.session_state["conversation_history"].append(
+                {"role": "user", "content": user_input}
+            )
+
+            # Call Gemini 1.5 Flash with the masked image as attachment
+            response_text = gemini.request_gemini_chat(
+                model_name="gemini-1.5-flash",  # Adjust if your model name differs
+                user_message=user_input,
+                pil_image=masked_image,  # The masked image as attachment
+                conversation_history=st.session_state["conversation_history"],
+                system_instructions=(
+                    "You are a helpful assistant. Ask clarifying questions "
+                    "based on the image and the user's messages."
+                )
+            )
+
+            # Add the assistant response to conversation history
+            st.session_state["conversation_history"].append(
+                {"role": "assistant", "content": response_text}
+            )
+
+    # Display the conversation
+    for turn in st.session_state["conversation_history"]:
+        if turn["role"] == "user":
+            st.markdown(f"**User:** {turn['content']}")
+        else:
+            st.markdown(f"**Assistant:** {turn['content']}")
 
 if __name__ == "__main__":
     main()
