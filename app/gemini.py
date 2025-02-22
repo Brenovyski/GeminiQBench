@@ -16,7 +16,6 @@ load_dotenv()  # Load environment variables from .env
 API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 # Initialize the Gemini client once (for bounding-box detection and chat).
-# You can re-initialize for different models or usage scenarios if needed.
 client = genai.Client(api_key=API_KEY)
 
 # System instructions for bounding-box detection
@@ -133,7 +132,6 @@ def generate_masked_image(pil_image: Image.Image, prompt: str = "Detect all obje
     final_prompt = prompt
 
     # Use the gemini-2.0-flash model (best for bounding box detection).
-    # If you want to parameterize the model name, you can add an argument.
     response = client.models.generate_content(
         model="gemini-2.0-flash",
         contents=[final_prompt, pil_image],
