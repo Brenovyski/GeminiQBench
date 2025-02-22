@@ -153,52 +153,44 @@ def request_gemini_chat(
     user_message: str,
     pil_image: Image.Image = None,
     conversation_history: list = None,
-    system_instructions: str = "You are a helpful assistant. Please provide useful responses by making questions about the image given until the user is satisfied.",
+    system_instructions: str = '''You are a helpful assistant. Your goal here is to extract unknow information from the user about the image given and provide helpful responses
+    to the user. You can ask questions, provide information, or engage in a conversation history. You can also ask the user to provide more information or clarify their request.
+    Try to obtain the unknow information from the user and solve what the user wants.''',
 ):
     """
-    Send a message (and optionally an image) to a Gemini model for multi-turn conversation.
-
-    Args:
-        model_name: The name of the Gemini model to call (e.g., "gemini-2.0-pro", "gemini-1.5-pro", etc.)
-        user_message: The user’s text message for the model.
-        pil_image: An optional PIL image to provide context (e.g., the masked image).
-        conversation_history: A list of previous messages for multi-turn conversation.
-        system_instructions: The system prompt to guide the model’s overall behavior.
-
-    Returns:
-        The model’s response (string).
+    Build a multi-turn conversation by passing the entire history to the model each time.
+    conversation_history is a list of dicts: [{"role": "user"/"assistant", "content": ...}, ...]
     """
-    if not API_KEY:
-        raise ValueError("GOOGLE_API_KEY is not set in environment variables.")
+    if conversation_history is None:
+        conversation_history = []
 
-    # Build the content array
-    # If you have a multi-turn conversation, you can join them or keep them separate
-    # as multiple text inputs. For example:
-    # contents = [sys_prompt, user1, user2, ... , user_message, pil_image?]
-    # The new Google GenAI client generally expects [text, optional images, optional attachments].
-    # This is a minimal approach—feel free to adapt for your conversation style.
+    # 1) Build the conversation text from history
+    #    Each turn is appended as "User: ..." or "Assistant: ..."
+    conversation_contents = []
+    for turn in conversation_history:
+        if turn["role"] == "assistant":
+            conversation_contents.append(f"{turn['content']}")
+        else:  # user
+            conversation_contents.append(f"{turn['content']}")
 
-    conversation_text = ""
-    if conversation_history:
-        # Example: each item in conversation_history is a dict { "role": "user"/"assistant", "content": ... }
-        for turn in conversation_history:
-            conversation_text += f"{turn['role'].capitalize()}: {turn['content']}\n"
+    # 2) Add the current user message
+    conversation_contents.append(f"User: {user_message}")
 
-    conversation_text += f"User: {user_message}\n"
-
-    contents = [conversation_text]
+    # 3) Optionally append the image (if provided) 
+    #    (Typically, you'd only do this once on the first user message)
+    #    The calling code can decide whether to pass pil_image or not.
     if pil_image is not None:
-        contents.append(pil_image)
+        conversation_contents.append(pil_image)
 
-    # Make the request
+    # 4) Call Gemini with all conversation text + optional image
     response = client.models.generate_content(
         model=model_name,
-        contents=contents,
+        contents=conversation_contents,
         config=types.GenerateContentConfig(
             system_instruction=system_instructions,
-            temperature=0.7,  # adjust as needed
-            safety_settings=SAFETY_SETTINGS,
+            temperature=0.7,  # or your desired value
         )
     )
 
+    # Return the text output
     return response.text
