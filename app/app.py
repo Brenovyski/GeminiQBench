@@ -27,7 +27,6 @@ def main():
     # ----------------------------------------------------------------
     # 1) Model Selection
     # ----------------------------------------------------------------
-    # Removed "o1" from the list
     model_options = ["gemini-1.5-pro", "gemini-2.0-flash", "gpt-4o"]
     st.session_state["model_choice"] = st.selectbox(
         "Select a model to chat with:",
@@ -143,7 +142,7 @@ def main():
 
             # Once the model returns a response, we display it in the same assistant message
             st.write(response_text)
-
+        print(st.session_state["conversation_history"])
         # Save user & assistant messages
         st.session_state["conversation_history"].append({"role": "user", "content": user_input})
         st.session_state["conversation_history"].append({"role": "assistant", "content": response_text})

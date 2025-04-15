@@ -1,20 +1,21 @@
 import os
-import requests
 import base64
 from io import BytesIO
 from PIL import Image
+from openai import OpenAI
 
-# Load your OpenAI API Key from environment variables
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("OPENAI_API_KEY is not set in environment variables.")
+# Initialize the OpenAI client.
+client = OpenAI()
 
-headers = {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {api_key}"
-}
+def encode_image_from_pil(image: Image.Image) -> str:
+    """
+    Convert a PIL image to a base64-encoded JPEG string.
+    """
+    buffered = BytesIO()
+    image.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-def _prepare_som_payload(
+def _prepare_new_payload(
     model_name: str,
     system_instructions: str,
     conversation_history: list,
@@ -22,66 +23,59 @@ def _prepare_som_payload(
     pil_image: Image.Image = None
 ):
     """
-    Build a SoM-style payload for GPT.
-    We'll treat the entire conversation + new user message as a single
-    'user' content array with {type: 'text'} + optional {type: 'image_url'}.
+    Build a SoM-style payload for GPT that obeys the new response structure.
 
-    The conversation is concatenated into one text block, then appended
-    with the new user message. The image is embedded as base64 in the 'image_url'.
+    The payload has the format:
+      {
+          "model": <model_name>,
+          "input": [
+              {
+                  "role": "user",
+                  "content": [
+                      { "type": "input_text", "text": "<combined text>" },
+                      { "type": "input_image", "image_url": { "url": "data:image/jpeg;base64,<base64_data>" } }   // optional
+                  ]
+              }
+          ],
+      }
+
+    The combined text is built by:
+      - Prepending the system instructions.
+      - Appending all previous conversation turns (each labeled as "User:" or "Assistant:").
+      - Finally appending the new user message.
     """
-
-    # 1) Combine the entire conversation into a single text block
-    #    For each turn, label it as 'User:' or 'Assistant:'.
+    # Combine conversation history into one text block.
     conversation_text = ""
     if conversation_history:
         for turn in conversation_history:
-            if turn["role"] == "assistant":
-                conversation_text += f"Assistant: {turn['content']}\n"
-            else:
-                conversation_text += f"User: {turn['content']}\n"
+            # Capitalize the role name for clarity.
+            conversation_text += f"{turn['role'].capitalize()}: {turn['content']}\n"
+    # Prepend system instructions and append the new user message.
+    combined_text = f"{system_instructions}\n{conversation_text}User: {user_message}\n"
+    print(combined_text)
 
-    # 2) Append the new user message
-    conversation_text += f"User: {user_message}\n"
-
-    # 3) Build the user content array
-    #    We have "type": "text" for the conversation text
-    #    If we have an image, we add "type": "image_url" with base64 data
-    user_content = [
-        {
-            "type": "text",
-            "text": conversation_text.strip()
-        }
+    # Build the content array with the text.
+    content_array = [
+        {"type": "input_text", "text": combined_text.strip()}
     ]
+    print(content_array)
 
-    # 4) Optionally embed the image in base64
+    # If there is an image, embed it as an input_image object.
     if pil_image is not None:
-        buffered = BytesIO()
-        pil_image.save(buffered, format="JPEG")
-        base64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        user_content.append({
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:image/jpeg;base64,{base64_image}"
-            }
+        base64_image = encode_image_from_pil(pil_image)
+        content_array.append({
+            "type": "input_image",
+            "image_url": f"data:image/jpeg;base64,{base64_image}"
         })
 
-    # 5) Construct the final SoM-style payload
-    #    - The system message is an array containing your system_instructions
-    #    - The user message is an array with {type: text} and optionally {type: image_url}
+    # Build and return the final payload.
+    if model_name == "gpt-4o" :
+        model_name = "chatgpt-4o-latest"  # use the chatgpt version for gpt-4o, this version is more adequated
     payload = {
-        "model": model_name,  # e.g., "chatgpt-4o-latest"
-        "messages": [
-            {
-                "role": "system",
-                "content": [system_instructions]
-            },
-            {
-                "role": "user",
-                "content": user_content
-            }
+        "model": model_name,
+        "input": [
+            {"role": "user", "content": content_array}
         ],
-        # If your model supports max_tokens, you can add it here:
-        "max_tokens": 800
     }
     return payload
 
@@ -91,46 +85,41 @@ def request_gpt_chat(
     pil_image: Image.Image = None,
     conversation_history: list = None,
     system_instructions: str = (
-        "You are a helpful assistant. Your goal here is to extract unknown information "
-        "from the user about the image given and provide helpful responses to the user. "
-        "You can ask questions, provide information, or engage in a conversation. "
-        "Try to obtain the unknown information from the user and solve what the user wants."
+        "You are a helpful assistant. Your goal here is to extract unknown information from the user about the image given and provide helpful responses. "
+        "You can ask questions, provide information, or engage in a conversation. Try to obtain the unknown information from the user and solve what the user wants."
+        "IMPORTANT: After you determined the final answer write in front of it: 'Final answer: ' and then refuses to answer any more questions."
     )
 ) -> str:
     """
-    Build a multi-turn conversation in SoM style by:
-      - Combining all conversation history into one text block
-      - Appending the new user message
-      - Optionally embedding a base64 image
-      - Sending the request to a SoM-compatible endpoint (like "chatgpt-4o-latest").
-
-    Note: This lumps the entire conversation into a single user message array, which
-    differs from standard ChatCompletion multi-turn usage. But it matches the SoM structure.
+    Build a multi-turn conversation in the new SoM-style format:
+      - Combine all prior conversation turns and the new user message (prefixed with system instructions)
+        into a single text block.
+      - Optionally embed a base64 image.
+      - Send the request using the new OpenAI SDK call, mimicking:
+      
+          response = client.responses.create(
+              model="gpt-4o",
+              input=[ { "role": "user", "content": [ ... ] } ],
+          )
+    
+    Returns the assistant's output text.
     """
-
     if conversation_history is None:
         conversation_history = []
 
-    # 1) Create the SoM-style payload
-    payload = _prepare_som_payload(
+    # Prepare the payload according to the new format.
+    payload = _prepare_new_payload(
         model_name=model_name,
         system_instructions=system_instructions,
         conversation_history=conversation_history,
         user_message=user_message,
         pil_image=pil_image
     )
-
-    # 2) Send the request
-    response = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=payload
+    print(payload['model']),
+    # Use the new response structure.
+    response = client.responses.create(  # For debugging, print the payload.
+        model=payload["model"],
+        input=payload["input"],
     )
-    data = response.json()
 
-    # 3) Check for errors
-    if "error" in data:
-        raise ValueError(f"OpenAI API Error: {data['error']}")
-
-    # 4) Return the assistant's text
-    return data["choices"][0]["message"]["content"]
+    return response.output_text
