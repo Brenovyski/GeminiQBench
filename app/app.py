@@ -46,7 +46,6 @@ def main():
     # (A) If model changed
     if st.session_state["model_choice"] != st.session_state["prev_model_choice"]:
         st.session_state["conversation_history"] = []
-        st.session_state["masked_image"] = None
         st.session_state["prev_model_choice"] = st.session_state["model_choice"]
         st.session_state["prev_image_name"] = current_image_name
 
@@ -122,7 +121,8 @@ def main():
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 # We'll always pass the 512px-high masked image to whichever model is selected
-                image_to_send = st.session_state["masked_image"]
+                #image_to_send = st.session_state["masked_image"]
+                image_to_send = original_image
 
                 if st.session_state["model_choice"] in ["gemini-1.5-pro", "gemini-2.0-flash"]:
                     response_text = gemini.request_gemini_chat(
@@ -142,10 +142,10 @@ def main():
 
             # Once the model returns a response, we display it in the same assistant message
             st.write(response_text)
-        print(st.session_state["conversation_history"])
         # Save user & assistant messages
         st.session_state["conversation_history"].append({"role": "user", "content": user_input})
         st.session_state["conversation_history"].append({"role": "assistant", "content": response_text})
+        print(st.session_state["conversation_history"])
 
         st.stop()
 

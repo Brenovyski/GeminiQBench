@@ -151,14 +151,19 @@ def request_gemini_chat(
     user_message: str,
     pil_image: Image.Image = None,
     conversation_history: list = None,
-    system_instructions: str = '''You are a helpful assistant. Your goal here is to extract unknow information from the user about the image given and provide helpful responses
+    system_instructions: str = '''SUMMARY: The user has an objective and you need to find the object in the image that the user wants. 
+    You are a helpful assistant. Your goal here is to determine what object the user wants by extracting unknow information from the user to solve ambiguity about the image given and provide helpful responses
     to the user. You can ask questions, provide information, or engage in a conversation history. You can also ask the user to provide more information or clarify their request.
-    Try to obtain the unknow information from the user and solve what the user wants.''',
+    Try to obtain the unknow information from the user and solve what the user wants. 
+    IMPORTANT: After you determined the final answer write in front of it: 'Final answer: ' alongside with the coordinates of the object in the image 
+    and then refuses to answer any more questions. The coordinates must be answered in a way that is easy to understand for the user. Avoid numerical coordinates.
+    ''',
 ):
     """
     Build a multi-turn conversation by passing the entire history to the model each time.
     conversation_history is a list of dicts: [{"role": "user"/"assistant", "content": ...}, ...]
     """
+
     if conversation_history is None:
         conversation_history = []
 

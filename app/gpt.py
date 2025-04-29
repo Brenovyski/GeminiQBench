@@ -58,7 +58,6 @@ def _prepare_new_payload(
     content_array = [
         {"type": "input_text", "text": combined_text.strip()}
     ]
-    print(content_array)
 
     # If there is an image, embed it as an input_image object.
     if pil_image is not None:
@@ -85,9 +84,14 @@ def request_gpt_chat(
     pil_image: Image.Image = None,
     conversation_history: list = None,
     system_instructions: str = (
-        "You are a helpful assistant. Your goal here is to extract unknown information from the user about the image given and provide helpful responses. "
-        "You can ask questions, provide information, or engage in a conversation. Try to obtain the unknown information from the user and solve what the user wants."
-        "IMPORTANT: After you determined the final answer write in front of it: 'Final answer: ' and then refuses to answer any more questions."
+        '''
+        SUMMARY: The user has an objective and you need to find the object in the image that the user wants.
+        You are a helpful assistant. Your goal here is to determine what object the user wants by extracting unknow information from the user to solve ambiguity about the image given and provide helpful responses
+        to the user. 
+        You can ask questions, provide information, or engage in a conversation. Try to obtain the unknown information from the user and solve what the user wants.
+        IMPORTANT: After you determined the final answer write in front of it: 'Final answer: ' alongside with the coordinates of the object in the image 
+        and then refuses to answer any more questions. The coordinates must be answered in a way that is easy to understand for the user. Avoid numerical coordinates.
+        '''
     )
 ) -> str:
     """

@@ -136,6 +136,7 @@ ENV/
 env.bak/
 venv.bak/
 app/.env
+rap_app/.env
 # Spyder project settings
 .spyderproject
 .spyproject
