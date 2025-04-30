@@ -4,3 +4,4 @@ google-genai
 openai
 pandas
 matplotlib
+xlsxwriter

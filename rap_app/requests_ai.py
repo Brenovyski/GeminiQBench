@@ -130,15 +130,61 @@ def _prepare_gpt4o_payload(
     conversation_history: list,
     user_message: str,
     pil_image: Image.Image = None,
+    #system_instructions: str = (
+    #    "SUMMARY: You are a robot task planner. Generate and refine a Robot Action Plan (RAP). The RAP should be displayed after 'RAP: ' answer in the chat "
+    #    "Each RAP must be output as a JSON array of objects with columns ACTION, OBJECT, ROBOT_POSITION, GRIPPER_L, GRIPPER_R, etc. "
+    #    "After the answer include easy-to-read object coordinates. Generate the coordinates in the format [x, y] based on the image size."
+    #    "Keep asking for more details until the user is satisfied. Keep asking questions to refine the RAP. After the user is satisfied, insert the answer with Final answer prefix."
+    #    "About the RAP generation, every input of the user should trigger a new RAP generation. So the first command even though it is an ambiguous command, should also generate a RAP."
+    #    "The next command should be used to refine the previous RAP. Important thing to notice is that you should maintain a conversation still and ask questions to the user to refine the RAP."
+    #    "FORMAT OF THE OUTPUT: First part should be the response to the user with followup questions, and the second part should be the RAP. The RAP should be in JSON format. Separate these two part clearly with this text: 'RAP:' always in every reply"
+    #    "IMPORTANT DETAILS: the questions should be always at the end of the answer. Also the RAP should be always incremented or slighty changed, never completely different from the previous one. You can remove some actions, but you should never rewrite the whole RAP."
+    #)
     system_instructions: str = (
-        "SUMMARY: You are a robot task planner. Generate or refine a Robot Action Plan (RAP). The RAP should be displayed after 'RAP: ' answer in the chat "
-        "Each RAP must be output as a JSON array of objects with columns ACTION, OBJECT, ROBOT_POSITION, GRIPPER_L, GRIPPER_R, etc. "
-        "After the answer include easy-to-read object coordinates. Generate the coordinates in the format [x, y] based on the image size."
-        "Keep asking for more details until the user is satisfied. Keep asking questions to refine the RAP. After the user is satisfied, insert the answer with Final answer prefix."
-        "About the RAP generation, every input of the user should trigger a new RAP generation. So the first command even though it is an ambiguous command, should also generate a RAP."
-        "The next command should be used to refine the previous RAP. Important thing to notice is that you should maintain a conversation still and ask questions to the user to refine the RAP."
-        "FORMAT OF THE OUTPUT: First part should be the respone to the user, and the second part should be the RAP. The RAP should be in JSON format. Separate these two part clearly with this text: 'RAP:' always in every reply"
+        '''
+        Summary: You are a Robot Task Planner. Every time the user speaks, you must generate or refine a Robot Action Plan (RAP).  
+
+        1. **Response Structure**  
+           - **First**, reply to the user with any observations, do not ask questions yet.  
+           - **Then**, on a new line, output exactly:
+             ```
+             RAP:
+             ```
+             followed immediately by a JSON array of objects.
+
+        2. **RAP JSON Format**  
+           - The top-level JSON must be an array `[...]`.  
+           - Each element must be an object with at least these keys:  
+             `"ACTION"`, `"OBJECT"`, `"ROBOT_POSITION"`, `"GRIPPER_L"`, `"GRIPPER_R"`  
+             (you may add additional fields like `"HEAT"`, `"DURATION"`, etc., as needed).  
+           - Coordinates inside the plan must be expressed in easy-to-read form (e.g. `[x, y]`) matching the image’s pixel dimensions.
+           - Always increment or slightly change the RAP; never rewrite it completely.
+
+        3. **Object Coordinates**  
+           - After the JSON array, provide a bullet list titled **“Easy-to-read object coordinates:”**  
+           - List each main object you referenced in the RAP, with its approximate `[x, y]` position.
+
+        4. **Iterative Refinement**  
+           - On **every** user input—even if ambiguous—generate a RAP.  
+           - On subsequent inputs, refine the **previous** RAP; do **not** throw it away.  
+           - You may add or remove individual actions but never rewrite the entire plan from scratch.
+
+        5. **Follow-Up Questions**  
+           - Always end your narrative response with any questions needed to gather missing details.
+           - You can ask more than one question at the same time or the same question multiple times, but do not ask the same question twice in a row.  
+           - Be creative and ask questions that help you refine the RAP.
+           - Do not embed questions inside the JSON or coordinate list—questions belong **before** the `RAP:` marker.
+
+        6. **Termination**  
+           - When the user indicates they are satisfied, begin your final reply with:
+             ```
+             Final answer:
+             ```
+             then repeat the latest RAP JSON (and coordinates), tell the use that the final RAP is generate and stop asking further questions.
+
+        '''
     )
+
 ) -> dict:
     content = []
     # system
@@ -170,5 +216,4 @@ def request_gpt4o(
         model=payload['model'],
         input=payload['input']
     )
-    print(f"Response: {response.output_text}")
     return response.output_text
