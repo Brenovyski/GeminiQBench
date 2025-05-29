@@ -100,12 +100,13 @@ def generate_masked_image(pil_image: Image.Image, prompt: str = "Detect all obje
     """
     Use Gemini 2.0 Flash to detect objects, then draw bounding boxes using plot_bounding_boxes.
     """
+    print(prompt)
     response = genai_client.models.generate_content(
         model="gemini-2.0-flash",
         contents=[prompt, pil_image],
         config=types.GenerateContentConfig(
             system_instruction=BOUNDING_BOX_SYSTEM_INSTRUCTIONS,
-            temperature=0.5,
+            temperature=0,
             safety_settings=SAFETY_SETTINGS,
         )
     )
@@ -142,7 +143,11 @@ def _prepare_gpt4o_payload(
     #)
     system_instructions: str = (
         '''
-        Summary: You are a Robot Task Planner. Every time the user speaks, you must generate or refine a Robot Action Plan (RAP).  
+        Summary: You are a Robot Task Planner. Every time the user speaks, you must generate or refine a Robot Action Plan (RAP).
+
+        0. **Absolute MUST-DO commands**
+            - **Always** generate a RAP in response to every user input (even if ambiguous). You always use the latest RAP as a base and refine it.
+            - **Never** rewrite the entire RAP from scratch; always build on the previous one.
 
         1. **Response Structure**  
            - **First**, reply to the user with any observations, do not ask questions yet.  
@@ -216,4 +221,11 @@ def request_gpt4o(
         model=payload['model'],
         input=payload['input']
     )
-    return response.output_text
+    total = getattr(response.usage, "total_tokens", None)
+    if total is None:
+        total = getattr(response.usage, "token_count", 0)
+
+    print(f"GPT-4o response tokens: {total}")
+    print(len(conversation_history), "conversation history")
+    print("GPT-4o response:", response.output_text)
+    return response.output_text, total
