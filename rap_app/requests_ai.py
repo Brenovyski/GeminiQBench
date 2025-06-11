@@ -59,10 +59,8 @@ def plot_bounding_boxes(im, bounding_boxes):
     """
     img = im
     width, height = img.size
-    # Create drawing object
     draw = ImageDraw.Draw(img)
 
-    # Color list
     base_colors = [
         'red','green','blue','yellow','orange','pink','purple','brown','gray',
         'beige','turquoise','cyan','magenta','lime','navy','maroon','teal',
@@ -70,23 +68,24 @@ def plot_bounding_boxes(im, bounding_boxes):
     ]
     colors = base_colors + additional_colors
 
-    # Strip fences
     bb_json = parse_json(bounding_boxes)
+    try:
+        boxes = json.loads(bb_json)
+    except:
+        boxes = []
 
-    # Load font
     try:
         font = ImageFont.truetype("NotoSansCJK-Regular.ttc", size=14)
     except IOError:
         font = ImageFont.load_default()
 
-    # Draw each box
-    for i, box in enumerate(json.loads(bb_json)):
+    for i, box in enumerate(boxes):
         color = colors[i % len(colors)]
-        y1, x1, y2, x2 = box.get("box_2d", [0,0,0,0])
-        abs_y1 = int((y1/1000)*height)
-        abs_x1 = int((x1/1000)*width)
-        abs_y2 = int((y2/1000)*height)
-        abs_x2 = int((x2/1000)*width)
+        y1, x1, y2, x2 = box.get("box_2d", [0, 0, 0, 0])
+        abs_y1 = int((y1 / 1000) * height)
+        abs_x1 = int((x1 / 1000) * width)
+        abs_y2 = int((y2 / 1000) * height)
+        abs_x2 = int((x2 / 1000) * width)
         if abs_x1 > abs_x2: abs_x1, abs_x2 = abs_x2, abs_x1
         if abs_y1 > abs_y2: abs_y1, abs_y2 = abs_y2, abs_y1
         draw.rectangle(((abs_x1, abs_y1), (abs_x2, abs_y2)), outline=color, width=4)
@@ -95,12 +94,10 @@ def plot_bounding_boxes(im, bounding_boxes):
 
     return img
 
-
 def generate_masked_image(pil_image: Image.Image, prompt: str = "Detect all objects in the image.") -> Image.Image:
     """
     Use Gemini 2.0 Flash to detect objects, then draw bounding boxes using plot_bounding_boxes.
     """
-    print(prompt)
     response = genai_client.models.generate_content(
         model="gemini-2.0-flash",
         contents=[prompt, pil_image],
@@ -111,11 +108,9 @@ def generate_masked_image(pil_image: Image.Image, prompt: str = "Detect all obje
         )
     )
     raw = response.text
-    # Draw boxes
     out_img = pil_image.copy()
     plot_bounding_boxes(out_img, raw)
     return out_img
-
 
 # ---- GPT-4o Chat Setup ----
 client = OpenAI()
@@ -126,21 +121,14 @@ def encode_image_from_pil(image: Image.Image) -> str:
     image.save(buf, format="JPEG")
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-
 def _prepare_gpt4o_payload(
     conversation_history: list,
     user_message: str,
-    pil_image: Image.Image = None,
-    #system_instructions: str = (
-    #    "SUMMARY: You are a robot task planner. Generate and refine a Robot Action Plan (RAP). The RAP should be displayed after 'RAP: ' answer in the chat "
-    #    "Each RAP must be output as a JSON array of objects with columns ACTION, OBJECT, ROBOT_POSITION, GRIPPER_L, GRIPPER_R, etc. "
-    #    "After the answer include easy-to-read object coordinates. Generate the coordinates in the format [x, y] based on the image size."
-    #    "Keep asking for more details until the user is satisfied. Keep asking questions to refine the RAP. After the user is satisfied, insert the answer with Final answer prefix."
-    #    "About the RAP generation, every input of the user should trigger a new RAP generation. So the first command even though it is an ambiguous command, should also generate a RAP."
-    #    "The next command should be used to refine the previous RAP. Important thing to notice is that you should maintain a conversation still and ask questions to the user to refine the RAP."
-    #    "FORMAT OF THE OUTPUT: First part should be the response to the user with followup questions, and the second part should be the RAP. The RAP should be in JSON format. Separate these two part clearly with this text: 'RAP:' always in every reply"
-    #    "IMPORTANT DETAILS: the questions should be always at the end of the answer. Also the RAP should be always incremented or slighty changed, never completely different from the previous one. You can remove some actions, but you should never rewrite the whole RAP."
-    #)
+    pil_image=None,  # either a single Image or a list of Images
+) -> dict:
+    """
+    Build a SoM‐style payload for GPT‐4o that handles single or multiple images.
+    """
     system_instructions: str = (
         '''
         Summary: You are a Robot Task Planner. Every time the user speaks, you must generate or refine a Robot Action Plan (RAP).
@@ -148,6 +136,7 @@ def _prepare_gpt4o_payload(
         0. **Absolute MUST-DO commands**
             - **Always** generate a RAP in response to every user input (even if ambiguous). You always use the latest RAP as a base and refine it.
             - **Never** rewrite the entire RAP from scratch; always build on the previous one.
+            - When moving between different images or views, always include explicit MOVE actions to navigate between those scene positions before object retrieval steps.
 
         1. **Response Structure**  
            - **First**, reply to the user with any observations, do not ask questions yet.  
@@ -168,6 +157,14 @@ def _prepare_gpt4o_payload(
         3. **Object Coordinates**  
            - After the JSON array, provide a bullet list titled **“Easy-to-read object coordinates:”**  
            - List each main object you referenced in the RAP, with its approximate `[x, y]` position.
+
+        3.1 **Multi-Image navigation**
+            - If multiple images (e.g. different rooms/views) are provided, include explicit MOVE actions
+              to navigate between those scene positions before object retrieval steps.
+            - You can ask about rooms, views, or scene positions to clarify navigation needs.
+            - Always ensure the RAP includes navigation steps when moving between different images or views.
+              One important note is tat the view navigation instruction must be very explicit, you can add another column to the RAP JSON to identify the view or room, 
+              and then use that column to generate the MOVE action. Try to always indicate where the robot is located. 
 
         4. **Iterative Refinement**  
            - On **every** user input—even if ambiguous—generate a RAP.  
@@ -190,42 +187,57 @@ def _prepare_gpt4o_payload(
         '''
     )
 
-) -> dict:
-    content = []
-    # system
-    content.append({"type":"input_text","text":system_instructions.strip()})
-    # history
-    for turn in (conversation_history or []):
-        label = "User" if turn['role']=='user' else "Assistant"
-        content.append({"type":"input_text","text":f"{label}: {turn['content']}"})
-    # new user
-    content.append({"type":"input_text","text":f"User: {user_message}"})
-    # image
-    if pil_image:
-        b64 = encode_image_from_pil(pil_image)
-        content.append({"type":"input_image","image_url":f"data:image/jpeg;base64,{b64}"})
-    return {"model":"chatgpt-4o-latest","input":[{"role":"user","content":content}]}
+    # Build messages
+    content = [{"type": "input_text", "text": system_instructions.strip()}]
 
+    # History
+    for turn in (conversation_history or []):
+        role = "User" if turn["role"] == "user" else "Assistant"
+        content.append({"type": "input_text", "text": f"{role}: {turn['content']}"})
+
+    # New user
+    content.append({"type": "input_text", "text": f"User: {user_message}"})
+
+    # Attach images: either one or many
+    if pil_image:
+        if isinstance(pil_image, list):
+            for img in pil_image:
+                b64 = encode_image_from_pil(img)
+                content.append({
+                    "type": "input_image",
+                    "image_url": f"data:image/jpeg;base64,{b64}"
+                })
+        else:
+            b64 = encode_image_from_pil(pil_image)
+            content.append({
+                "type": "input_image",
+                "image_url": f"data:image/jpeg;base64,{b64}"
+            })
+
+    return {"model": "chatgpt-4o-latest", "input": [{"role": "user", "content": content}]}
 
 def request_gpt4o(
     user_message: str,
     conversation_history: list,
-    pil_image: Image.Image = None
-) -> str:
+    pil_image=None  # either a single Image or a list of Images
+) -> tuple[str, int]:
+    """
+    Send the constructed payload to GPT-4o, returning (reply_text, total_tokens).
+    """
     payload = _prepare_gpt4o_payload(
         conversation_history=conversation_history,
         user_message=user_message,
         pil_image=pil_image
     )
     response = client.responses.create(
-        model=payload['model'],
-        input=payload['input']
+        model=payload["model"],
+        input=payload["input"]
     )
-    total = getattr(response.usage, "total_tokens", None)
-    if total is None:
-        total = getattr(response.usage, "token_count", 0)
 
-    print(f"GPT-4o response tokens: {total}")
-    print(len(conversation_history), "conversation history")
-    print("GPT-4o response:", response.output_text)
+    usage = response.usage
+    if hasattr(usage, "prompt_tokens") and hasattr(usage, "completion_tokens"):
+        total = usage.prompt_tokens + usage.completion_tokens
+    else:
+        total = getattr(usage, "total_tokens", 0) or getattr(usage, "token_count", 0)
+
     return response.output_text, total
