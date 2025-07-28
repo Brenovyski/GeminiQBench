@@ -228,16 +228,24 @@ def main():
         st.subheader("Robot Action Plan")
         if st.session_state["rap_versions"]:
             latest = st.session_state["rap_versions"][-1]
+        
             if len(st.session_state["rap_versions"]) > 1:
                 prev = st.session_state["rap_versions"][-2]
-                old_jsons = set(prev.apply(lambda r: r.to_json(), axis=1))
-                is_new = latest.apply(lambda r: r.to_json() not in old_jsons, axis=1)
-
-                def highlight_row(row):
-                    return ["color: yellow"] * len(row) if is_new[row.name] else [""] * len(row)
-
-                st.dataframe(latest.style.apply(highlight_row, axis=1),
-                             use_container_width=True)
+                new_cols = [c for c in latest.columns if c not in prev.columns]
+                prev_dicts = [r.to_dict() for _, r in prev.iterrows()]
+        
+                def is_identical(row, ref):
+                    shared = set(row.index) & set(ref.index)
+                    return all(row[c] == ref[c] for c in shared)
+        
+                def highlight(row):
+                    if not any(is_identical(row, pd.Series(pr)) for pr in prev_dicts):
+                        return ["color: yellow"] * len(row)
+                    if any(pd.notnull(row[c]) and row[c] not in ("", None) for c in new_cols):
+                        return ["color: yellow"] * len(row)
+                    return [""] * len(row)
+        
+                st.dataframe(latest.style.apply(highlight, axis=1), use_container_width=True)
             else:
                 st.dataframe(latest, use_container_width=True)
         else:
