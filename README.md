@@ -1,12 +1,18 @@
-# GeminiQBench
+# RAPBench
 
-GeminiQBench is a simple application designed to benchmark various LMMS models on computer vision tasks. It integrates Gemini 2.0 object detection with an interactive, multi-turn conversational interface built with Streamlit. The system dynamically refines its questions based on user input to accurately identify a specific object in an image.
+RAPBench is a lightweight application designed to benchmark the planning capabilities of large multimodal models (LMMs), focusing on **ChatGPT-4o** for **robot action planning (RAP)** tasks in domestic and office environments. The interface supports **multi-image inputs** and **turn-based interactions**, enabling iterative plan refinement.
 
-## Features
+Built with **Streamlit**, this application allows real-time testing and export of performance data, including robot action sequences and interaction metrics.
 
-- **Gemini 2.0 Object Detection:** Processes input images to generate masked outputs and bounding boxes.
-- **Multi-Turn Conversational Interface:** Enables dynamic questioning to refine object detection based on user responses.
-- **Benchmarking Framework:** Compares the performance of different LMMS models in interactive visual tasks.
+---
+
+## 🚀 Features
+
+- 📷 **Multimodal Input:** Upload multiple room images as visual context.
+- 💬 **Turn-Based Planning:** Issue natural language instructions and refine plans through follow-up interactions.
+- 🧠 **Plan Visualization:** Display structured robot action plans in tabular format.
+- 📈 **Metrics Logging:** Track questions, response length, latency, and token usage per iteration.
+- 📤 **Export & Comparison:** Compare RAPs and logs between prompt iterations.
 
 ## Requirements
 
