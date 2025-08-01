@@ -25,8 +25,8 @@ Built with **Streamlit**, this application allows real-time testing and export o
 1. **Clone the repository:**
 
     ```bash
-    git clone https://github.com/yourusername/GeminiQBench.git
-    cd GeminiQBench
+    git clone https://github.com/yourusername/RAPBench.git
+    cd RAPBench
     ```
 
 2. **Set up your virtual environment and install dependencies:**
@@ -41,5 +41,16 @@ Built with **Streamlit**, this application allows real-time testing and export o
 
 Start the Streamlit interface by running:
 
+
+If you want to use the latest app made for the Robot Action Plan Benchmarking:
 ```bash
+cd rap_app
+streamlit run rap_app_standalone.py
+```
+
+Else if you want to use the previous version used for the question and answer benchmark with
+gemini object detection: 
+```bash
+cd app
 streamlit run app.py
+```

@@ -46,11 +46,9 @@ def strip_rap_label_and_json(full_text: str) -> str:
 
 def handle_user_turn(user_text: str | None, images: list[Image.Image] | None):
     """Echoes the turn, calls GPT-4o with any images, and updates RAP tables."""
-    # Echo user input
     if user_text:
         st.chat_message("user").write(user_text)
 
-    # Display images in a 5-column grid as thumbnails
     if images:
         msg = st.chat_message("user")
         # chunk images into rows of 5
@@ -60,7 +58,6 @@ def handle_user_turn(user_text: str | None, images: list[Image.Image] | None):
             for col, img in zip(cols, row_imgs):
                 col.image(img, width=300)
 
-    # Build conversation context
     ctx = []
     for it in st.session_state["iteration_data"]:
         ctx += [
@@ -68,7 +65,6 @@ def handle_user_turn(user_text: str | None, images: list[Image.Image] | None):
             {"role": "assistant", "content": it["assistant_full"]},
         ]
 
-    # Call GPT-4o
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
             start = time.time()
@@ -81,7 +77,6 @@ def handle_user_turn(user_text: str | None, images: list[Image.Image] | None):
             narrative = strip_rap_label_and_json(reply)
             st.write(narrative)
 
-    # Parse and record RAP JSON
     snippet = extract_json_snippet(reply)
     try:
         rap_list = json.loads(snippet)
@@ -90,7 +85,6 @@ def handle_user_turn(user_text: str | None, images: list[Image.Image] | None):
     df = pd.DataFrame(rap_list)
     st.session_state["rap_versions"].append(df)
 
-    # Track changes
     if len(st.session_state["rap_versions"]) > 1:
         prev, cur = st.session_state["rap_versions"][-2:]
         old_jsons = set(prev.apply(lambda r: r.to_json(), axis=1))
@@ -99,7 +93,6 @@ def handle_user_turn(user_text: str | None, images: list[Image.Image] | None):
         for _, row in cur[is_new].iterrows():
             st.session_state["rap_changes"].append({"Iteration": iteration, **row.to_dict()})
 
-    # Record iteration metadata
     st.session_state["iteration_data"].append({
         "Iteration":      len(st.session_state["rap_versions"]),
         "User":           user_text or "<image>",
@@ -114,14 +107,12 @@ def main():
     st.set_page_config(layout="wide")
     st.title("RAP-Bench: Live Multimodal Chat")
 
-    # Initialize RAP history state
     st.session_state.setdefault("iteration_data", [])
     st.session_state.setdefault("rap_versions", [])
     st.session_state.setdefault("rap_changes", [])
 
     left, right = st.columns([2, 3])
 
-    # Chat input panel with unified send
     with left:
         st.subheader("Chat")
         with st.form(key="chat_form", clear_on_submit=True):
@@ -139,10 +130,8 @@ def main():
             if uploaded_files:
                 images = [Image.open(f) for f in uploaded_files]
 
-            # handle and display the chat
             handle_user_turn(user_text or None, images)
 
-            # clear upload slots
             st.session_state.pop("pending_uploads", None)
 
     # RAP display panel
@@ -159,7 +148,9 @@ def main():
                 def is_identical(row, ref):
                     shared = set(row.index) & set(ref.index)
                     return all(row[c] == ref[c] for c in shared)
-        
+
+                # the highlight function is not working as intended, possible fixing need to be done here
+                # sometimes old rows are also highlighted, need to investigate
                 def highlight(row):
                     if not any(is_identical(row, pd.Series(pr)) for pr in prev_dicts):
                         return ["color: yellow"] * len(row)
@@ -173,14 +164,12 @@ def main():
         else:
             st.info("Your RAP will appear here once you chat.")
 
-        # Change Log
         with st.expander("Change Log", expanded=False):
             if st.session_state["rap_changes"]:
                 st.table(pd.DataFrame(st.session_state["rap_changes"]))
             else:
                 st.write("No changes yet.")
 
-        # Iteration History
         with st.expander("Iteration History", expanded=False):
             if st.session_state["iteration_data"]:
                 hist = pd.DataFrame(st.session_state["iteration_data"]).rename(
@@ -190,7 +179,6 @@ def main():
             else:
                 st.write("No iterations yet.")
 
-    # Per-Iteration Metrics
     if st.session_state["rap_versions"]:
         st.write("---")
         st.subheader("Per-Iteration Metrics")
@@ -215,7 +203,6 @@ def main():
             ax.grid(alpha=0.3)
             col.pyplot(fig, use_container_width=True, clear_figure=True)
 
-    # Export All Data to Excel
     st.write("---")
     if st.button("📥 Export all data to Excel"):
         rows = []

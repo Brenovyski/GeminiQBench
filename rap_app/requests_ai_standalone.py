@@ -11,22 +11,18 @@ import streamlit as st
 # Load environment variables
 load_dotenv()
 
-# ---- Configuration ----
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY is not set in environment variables.")
 
-# Initialize OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# ---- Helper: Encode PIL Image ----
 def encode_image_from_pil(image: Image.Image) -> str:
     """Convert a PIL image to a base64-encoded JPEG string."""
     buf = BytesIO()
     image.save(buf, format="JPEG")
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-# ---- Prepare GPT-4o Payload ----
 def _prepare_gpt4o_payload(
     conversation_history: list,
     user_message: str,
@@ -93,18 +89,14 @@ def _prepare_gpt4o_payload(
              then repeat the latest RAP JSON (and coordinates), tell the use that the final RAP is generate and stop asking further questions.
 
         '''
-    # Build message content
     content = [{"type": "input_text", "text": system_instructions.strip()}]
 
-    # Append history
     for turn in conversation_history or []:
         role = "User" if turn["role"] == "user" else "Assistant"
         content.append({"type": "input_text", "text": f"{role}: {turn['content']}"})
 
-    # New user message
     content.append({"type": "input_text", "text": f"User: {user_message}"})
 
-    # Attach images uniformly
     imgs = pil_image or []
     if not isinstance(imgs, list):
         imgs = [imgs]
@@ -117,7 +109,6 @@ def _prepare_gpt4o_payload(
 
     return {"model": "chatgpt-4o-latest", "input": [{"role": "user", "content": content}]}
 
-# ---- Send Request to GPT-4o ----
 def request_gpt4o(
     user_message: str,
     conversation_history: list,
